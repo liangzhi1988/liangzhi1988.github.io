@@ -1,0 +1,257 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>分钟倒计时应用</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    body {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      min-height: 100vh;
+    }
+    .countdown-display {
+      text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      transition: all 0.3s ease;
+    }
+    .control-btn {
+      transition: all 0.2s ease;
+    }
+    .control-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+    .progress-ring {
+      transition: stroke-dashoffset 1s linear;
+    }
+    .pulse {
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+      100% { transform: scale(1); }
+    }
+  </style>
+</head>
+<body class="flex items-center justify-center p-4">
+  <div class="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md text-center">
+    <h1 class="text-3xl font-bold text-gray-800 mb-2">⏱️ 分钟倒计时器</h1>
+    <p class="text-gray-600 mb-6">专注每一刻，时间在流动</p>
+    
+    <!-- 设置区域 -->
+    <div class="mb-8">
+      <label for="minutes-input" class="block text-lg font-medium text-gray-700 mb-2">倒计时分钟数</label>
+      <div class="flex items-center justify-center gap-2">
+        <input 
+          type="number" 
+          id="minutes-input" 
+          min="1" 
+          max="120" 
+          value="1"
+          class="border-2 border-gray-300 rounded-lg px-4 py-3 text-xl w-32 text-center focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+        >
+        <span class="text-xl text-gray-700">分钟</span>
+      </div>
+    </div>
+
+    <!-- 圆形进度条 -->
+    <div class="relative flex items-center justify-center mb-6">
+      <svg class="w-64 h-64 transform -rotate-90" viewBox="0 0 120 120">
+        <circle 
+          cx="60" 
+          cy="60" 
+          r="50" 
+          fill="none" 
+          stroke="#e0e0e0" 
+          stroke-width="8"
+        />
+        <circle 
+          id="progress-ring" 
+          cx="60" 
+          cy="60" 
+          r="50" 
+          fill="none" 
+          stroke="url(#gradient)" 
+          stroke-width="8" 
+          stroke-linecap="round"
+          class="progress-ring"
+          stroke-dasharray="314.159"
+          stroke-dashoffset="0"
+        />
+        <defs>
+          <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#667eea" />
+            <stop offset="100%" stop-color="#764ba2" />
+          </linearGradient>
+        </defs>
+      </svg>
+      <div class="absolute inset-0 flex flex-col items-center justify-center">
+        <div id="time-display" class="text-4xl font-bold text-gray-800 countdown-display">05:00</div>
+        <div id="status-text" class="text-sm text-gray-600 mt-1">准备开始</div>
+      </div>
+    </div>
+
+    <!-- 控制按钮 -->
+    <div class="flex justify-center gap-4 mb-6">
+      <button 
+        id="start-btn" 
+        onclick="startCountdown()" 
+        class="control-btn bg-gradient-to-r from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600 text-white font-semibold py-3 px-6 rounded-full shadow-lg flex items-center"
+      >
+        <i class="fas fa-play mr-2"></i> 开始
+      </button>
+      <button 
+        id="pause-btn" 
+        onclick="pauseCountdown()" 
+        class="control-btn bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white font-semibold py-3 px-6 rounded-full shadow-lg flex items-center"
+        style="display:none;"
+      >
+        <i class="fas fa-pause mr-2"></i> 暂停
+      </button>
+      <button 
+        onclick="resetCountdown()" 
+        class="control-btn bg-gradient-to-r from-gray-500 to-gray-700 hover:from-gray-600 hover:to-gray-800 text-white font-semibold py-3 px-6 rounded-full shadow-lg flex items-center"
+      >
+        <i class="fas fa-redo mr-2"></i> 重置
+      </button>
+    </div>
+
+    <!-- 提示信息 -->
+    <div id="message" class="mt-4 text-center hidden">
+      <p id="message-text" class="text-lg font-semibold"></p>
+    </div>
+  </div>
+
+  <script>
+    let countdownInterval = null;
+    let totalSeconds = 0;
+    let remainingSeconds = 0;
+    let isRunning = false;
+    const progressRing = document.getElementById('progress-ring');
+    const circumference = 2 * Math.PI * 50; // 2πr
+    progressRing.style.strokeDasharray = `${circumference} ${circumference}`;
+    progressRing.style.strokeDashoffset = 0;
+
+    function setProgress(percent) {
+      const offset = circumference - (percent / 100) * circumference;
+      progressRing.style.strokeDashoffset = offset;
+    }
+
+    function updateDisplay() {
+      const minutes = Math.floor(remainingSeconds / 60);
+      const seconds = remainingSeconds % 60;
+      document.getElementById('time-display').textContent = 
+        `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+
+    function setMinutes(minutes) {
+      document.getElementById('minutes-input').value = minutes;
+      resetCountdown();
+    }
+
+    function startCountdown() {
+      if (isRunning) return;
+      
+      if (remainingSeconds <= 0) {
+        const minutes = parseInt(document.getElementById('minutes-input').value) || 5;
+        if (minutes < 1 || minutes > 120) {
+          showMessage('请输入1-120之间的分钟数', 'error');
+          return;
+        }
+        totalSeconds = minutes * 60;
+        remainingSeconds = totalSeconds;
+      }
+      
+      isRunning = true;
+      document.getElementById('start-btn').style.display = 'none';
+      document.getElementById('pause-btn').style.display = 'flex';
+      document.getElementById('status-text').textContent = '进行中...';
+      
+      countdownInterval = setInterval(() => {
+        remainingSeconds--;
+        const progress = ((totalSeconds - remainingSeconds) / totalSeconds) * 100;
+        setProgress(progress);
+        updateDisplay();
+        
+        // 添加时间变化动画效果
+        const timeDisplay = document.getElementById('time-display');
+        timeDisplay.classList.add('pulse');
+        setTimeout(() => {
+          timeDisplay.classList.remove('pulse');
+        }, 500);
+        
+        if (remainingSeconds <= 0) {
+          finishCountdown();
+        }
+      }, 1000);
+      
+      updateDisplay();
+    }
+
+    function pauseCountdown() {
+      if (!isRunning) return;
+      
+      clearInterval(countdownInterval);
+      isRunning = false;
+      document.getElementById('start-btn').style.display = 'flex';
+      document.getElementById('pause-btn').style.display = 'none';
+      document.getElementById('status-text').textContent = '已暂停';
+    }
+
+    function resetCountdown() {
+      clearInterval(countdownInterval);
+      isRunning = false;
+      const minutes = parseInt(document.getElementById('minutes-input').value) || 5;
+      totalSeconds = minutes * 60;
+      remainingSeconds = totalSeconds;
+      
+      document.getElementById('start-btn').style.display = 'flex';
+      document.getElementById('pause-btn').style.display = 'none';
+      document.getElementById('status-text').textContent = '准备开始';
+      document.getElementById('message').classList.add('hidden');
+      
+      setProgress(0);
+      updateDisplay();
+    }
+
+    function finishCountdown() {
+      clearInterval(countdownInterval);
+      isRunning = false;
+      remainingSeconds = 0;
+      updateDisplay();
+      
+      document.getElementById('start-btn').style.display = 'flex';
+      document.getElementById('pause-btn').style.display = 'none';
+      document.getElementById('status-text').textContent = '已完成';
+      
+      showMessage('🎉 时间到！专注任务完成', 'success');
+      
+      // 播放提示音（模拟）
+      document.body.innerHTML += '<audio autoplay><source src="data:audio/mpeg;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAA1N3aXRjaCBQbHVzIMKpIE5DSCBTb2Z0d2FyZQBUSVQyAAAABgAAAzIyMzUAVFNTRQAAAA8AAANMYXZmNTcuODMuMTAwAAAAAAAAAAAAAAD/80DEAAAAA0gAAAAATEFNRTMuMTAwVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/zQsRbAAADSAAAAABVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/zQMSkAAADSAAAAABVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV" type="audio/mpeg"></audio>';
+    }
+
+    function showMessage(text, type) {
+      const messageElement = document.getElementById('message');
+      const messageText = document.getElementById('message-text');
+      
+      messageText.textContent = text;
+      messageText.className = 'text-lg font-semibold ' + 
+        (type === 'error' ? 'text-red-600' : 'text-green-600');
+      
+      messageElement.classList.remove('hidden');
+      
+      // 3秒后自动隐藏
+      setTimeout(() => {
+        messageElement.classList.add('hidden');
+      }, 3000);
+    }
+
+    // 初始化
+    resetCountdown();
+  </script>
+</body>
+</html>
